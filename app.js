@@ -187,38 +187,24 @@ const QUESTIONS = RAW_NOTES.trim().split("\n").map((line, index) => {
 });
 
 const state = {
-  session: [],
-  index: 0,
-  correct: 0,
-  answered: 0,
-  answeredCurrent: false,
-  mistakes: [],
+  currentCard: null,
+  answerCards: [],
+  selectedAnswer: null,
+  matched: false,
   selectedTopic: TOPICS[0],
 };
 
 const els = {
-  setupPanel: document.querySelector("#setupPanel"),
-  quizPanel: document.querySelector("#quizPanel"),
-  resultPanel: document.querySelector("#resultPanel"),
   topicSelect: document.querySelector("#topicSelect"),
-  questionCountSelect: document.querySelector("#questionCountSelect"),
-  startButton: document.querySelector("#startButton"),
-  restartButton: document.querySelector("#restartButton"),
-  correctCount: document.querySelector("#correctCount"),
-  answeredCount: document.querySelector("#answeredCount"),
-  topicBadge: document.querySelector("#topicBadge"),
-  questionCounter: document.querySelector("#questionCounter"),
-  progressBar: document.querySelector("#progressBar"),
-  questionText: document.querySelector("#questionText"),
+  deckInfo: document.querySelector("#deckInfo"),
+  definitionCard: document.querySelector("#definitionCard"),
+  definitionText: document.querySelector("#definitionText"),
   answerGrid: document.querySelector("#answerGrid"),
   feedbackPanel: document.querySelector("#feedbackPanel"),
   feedbackTitle: document.querySelector("#feedbackTitle"),
   feedbackText: document.querySelector("#feedbackText"),
-  nextButton: document.querySelector("#nextButton"),
-  resultTitle: document.querySelector("#resultTitle"),
-  resultText: document.querySelector("#resultText"),
-  retryMistakesButton: document.querySelector("#retryMistakesButton"),
-  newSessionButton: document.querySelector("#newSessionButton"),
+  anotherCardButton: document.querySelector("#anotherCardButton"),
+  matchButton: document.querySelector("#matchButton"),
 };
 
 function shuffle(items) {
@@ -235,7 +221,7 @@ function renderTopicOptions() {
     const count = QUESTIONS.filter((question) => (
       topic.id === "all" || question.topic === topic.id
     )).length;
-    return `<option value="${topic.id}">${topic.name} (${count})</option>`;
+    return `<option value="${topic.id}">${topic.name} · ${count} kart</option>`;
   }).join("");
 }
 
@@ -245,48 +231,32 @@ function getQuestionPool(topicId) {
     : QUESTIONS.filter((question) => question.topic === topicId);
 }
 
-function startSession(customQuestions = null) {
+function showAnotherCard() {
   state.selectedTopic = TOPICS.find((topic) => topic.id === els.topicSelect.value) ?? TOPICS[0];
-
-  if (customQuestions) {
-    state.session = shuffle(customQuestions);
-    state.selectedTopic = { id: "mistakes", name: "Yanlış cevaplar" };
-  } else {
-    const pool = shuffle(getQuestionPool(state.selectedTopic.id));
-    const requestedCount = els.questionCountSelect.value === "all"
-      ? pool.length
-      : Number(els.questionCountSelect.value);
-    state.session = pool.slice(0, Math.min(requestedCount, pool.length));
-  }
-
-  state.index = 0;
-  state.correct = 0;
-  state.answered = 0;
-  state.answeredCurrent = false;
-  state.mistakes = [];
-
-  els.setupPanel.hidden = true;
-  els.resultPanel.hidden = true;
-  els.quizPanel.hidden = false;
-  updateScore();
-  renderQuestion();
+  const pool = getQuestionPool(state.selectedTopic.id);
+  const freshPool = pool.filter((card) => card.id !== state.currentCard?.id);
+  state.currentCard = shuffle(freshPool.length > 0 ? freshPool : pool)[0];
+  state.answerCards = buildAnswerCards(state.currentCard);
+  state.selectedAnswer = null;
+  state.matched = false;
+  renderGame();
 }
 
-function buildChoices(question) {
+function buildAnswerCards(card) {
   const blockedAnswers = new Set(
     QUESTIONS
-      .filter((item) => item.prompt === question.prompt)
+      .filter((item) => item.prompt === card.prompt)
       .map((item) => normalizeAnswer(item.answer))
   );
 
   const sameTopic = QUESTIONS.filter((item) => (
-    item.id !== question.id
-    && item.topic === question.topic
+    item.id !== card.id
+    && item.topic === card.topic
     && !blockedAnswers.has(normalizeAnswer(item.answer))
   ));
   const otherTopics = QUESTIONS.filter((item) => (
-    item.id !== question.id
-    && item.topic !== question.topic
+    item.id !== card.id
+    && item.topic !== card.topic
     && !blockedAnswers.has(normalizeAnswer(item.answer))
   ));
 
@@ -300,149 +270,92 @@ function buildChoices(question) {
     }
   });
 
-  return shuffle([question.answer, ...uniqueCandidates.slice(0, 3)]);
+  return shuffle([card.answer, ...uniqueCandidates.slice(0, 9)]);
 }
 
-function formatPrompt(prompt) {
-  return /[?.!]$/.test(prompt) ? prompt : `${prompt}?`;
-}
-
-function renderQuestion() {
-  const question = state.session[state.index];
-  const choices = buildChoices(question);
-  state.answeredCurrent = false;
-
-  els.topicBadge.textContent = state.selectedTopic.name;
-  els.questionCounter.textContent = `Soru ${state.index + 1} / ${state.session.length}`;
-  els.progressBar.style.width = `${(state.index / state.session.length) * 100}%`;
-  els.questionText.textContent = formatPrompt(question.prompt);
+function renderGame() {
+  const poolSize = getQuestionPool(state.selectedTopic.id).length;
+  els.deckInfo.textContent = `${state.selectedTopic.name} destesinden ${poolSize} tanım`;
+  els.definitionText.textContent = state.currentCard.prompt;
+  els.definitionCard.classList.remove("is-matched");
   els.feedbackPanel.hidden = true;
   els.feedbackPanel.classList.remove("is-wrong");
-  els.nextButton.textContent = state.index === state.session.length - 1 ? "Sonucu gör" : "Sonraki soru";
+  els.matchButton.disabled = true;
 
   els.answerGrid.innerHTML = "";
-  choices.forEach((answer, index) => {
+  state.answerCards.forEach((answer) => {
     const button = document.createElement("button");
-    button.className = "answer-button";
+    button.className = "answer-card";
     button.type = "button";
     button.dataset.answer = answer;
-    button.innerHTML = `
-      <span class="answer-key">${index + 1}</span>
-      <span>${answer}</span>
-    `;
-    button.addEventListener("click", () => selectAnswer(button, question));
+    button.textContent = answer;
+    button.setAttribute("aria-pressed", "false");
+    button.addEventListener("click", () => selectAnswerCard(button));
     els.answerGrid.append(button);
   });
-
-  els.answerGrid.querySelector(".answer-button")?.focus({ preventScroll: true });
 }
 
-function selectAnswer(selectedButton, question) {
-  if (state.answeredCurrent) {
+function selectAnswerCard(selectedButton) {
+  if (state.matched) {
     return;
   }
 
-  state.answeredCurrent = true;
-  state.answered += 1;
-  const isCorrect = normalizeAnswer(selectedButton.dataset.answer) === normalizeAnswer(question.answer);
-
-  els.answerGrid.querySelectorAll(".answer-button").forEach((button) => {
-    button.disabled = true;
-    if (normalizeAnswer(button.dataset.answer) === normalizeAnswer(question.answer)) {
-      button.classList.add("correct");
-    }
+  els.answerGrid.querySelectorAll(".answer-card").forEach((button) => {
+    button.classList.remove("is-selected", "is-wrong");
+    button.setAttribute("aria-pressed", "false");
   });
 
-  if (isCorrect) {
-    state.correct += 1;
-    els.feedbackTitle.textContent = "Doğru bildin";
-    els.feedbackText.textContent = question.answer;
-  } else {
-    selectedButton.classList.add("wrong");
-    state.mistakes.push(question);
-    els.feedbackPanel.classList.add("is-wrong");
-    els.feedbackTitle.textContent = "Yanlış cevap";
-    els.feedbackText.textContent = `Doğru cevap: ${question.answer}`;
+  state.selectedAnswer = selectedButton.dataset.answer;
+  selectedButton.classList.add("is-selected");
+  selectedButton.setAttribute("aria-pressed", "true");
+  els.feedbackPanel.hidden = true;
+  els.feedbackPanel.classList.remove("is-wrong");
+  els.matchButton.disabled = false;
+}
+
+function matchSelectedCards() {
+  if (!state.selectedAnswer || state.matched) {
+    return;
   }
 
+  const selectedButton = els.answerGrid.querySelector(".answer-card.is-selected");
+  const isMatch = normalizeAnswer(state.selectedAnswer) === normalizeAnswer(state.currentCard.answer);
+
+  if (!selectedButton) {
+    return;
+  }
+
+  if (isMatch) {
+    state.matched = true;
+    els.definitionCard.classList.add("is-matched");
+    selectedButton.classList.remove("is-selected");
+    selectedButton.classList.add("is-matched");
+    els.answerGrid.querySelectorAll(".answer-card").forEach((button) => {
+      button.disabled = true;
+    });
+    showFeedback("Eşleşti", `${state.currentCard.answer} bu tanımın doğru eşidir.`);
+    els.matchButton.disabled = true;
+    els.anotherCardButton.focus({ preventScroll: true });
+  } else {
+    selectedButton.classList.remove("is-selected");
+    selectedButton.classList.add("is-wrong");
+    selectedButton.setAttribute("aria-pressed", "false");
+    state.selectedAnswer = null;
+    showFeedback("Bu kartlar eşleşmedi", "Başka bir cevap kartı seçip yeniden dene.", true);
+    els.matchButton.disabled = true;
+  }
+}
+
+function showFeedback(title, text, isWrong = false) {
+  els.feedbackTitle.textContent = title;
+  els.feedbackText.textContent = text;
+  els.feedbackPanel.classList.toggle("is-wrong", isWrong);
   els.feedbackPanel.hidden = false;
-  updateScore();
-  els.nextButton.focus({ preventScroll: true });
 }
 
-function updateScore() {
-  els.correctCount.textContent = String(state.correct);
-  els.answeredCount.textContent = String(state.answered);
-}
-
-function goNext() {
-  if (!state.answeredCurrent) {
-    return;
-  }
-
-  if (state.index >= state.session.length - 1) {
-    showResults();
-    return;
-  }
-
-  state.index += 1;
-  renderQuestion();
-}
-
-function showResults() {
-  const total = state.session.length;
-  const percentage = Math.round((state.correct / total) * 100);
-
-  els.quizPanel.hidden = true;
-  els.resultPanel.hidden = false;
-  els.resultTitle.textContent = `${state.correct} / ${total} doğru · %${percentage}`;
-
-  if (percentage === 100) {
-    els.resultText.textContent = "Kusursuz bir oturum. Bu bölümdeki tüm cevapları doğru bildin.";
-  } else if (percentage >= 75) {
-    els.resultText.textContent = `Gayet iyi gidiyor. ${state.mistakes.length} soruyu tekrar ederek bilgileri sağlamlaştırabilirsin.`;
-  } else {
-    els.resultText.textContent = `${state.mistakes.length} soruyu tekrar etmek bu konudaki boşlukları hızlıca kapatacaktır.`;
-  }
-
-  els.retryMistakesButton.hidden = state.mistakes.length === 0;
-  els.progressBar.style.width = "100%";
-}
-
-function showSetup() {
-  els.quizPanel.hidden = true;
-  els.resultPanel.hidden = true;
-  els.setupPanel.hidden = false;
-  els.startButton.focus({ preventScroll: true });
-}
-
-function retryMistakes() {
-  const questions = [...state.mistakes];
-  if (questions.length > 0) {
-    startSession(questions);
-  }
-}
-
-function handleKeyboard(event) {
-  if (!els.quizPanel.hidden && !state.answeredCurrent && ["1", "2", "3", "4"].includes(event.key)) {
-    event.preventDefault();
-    const button = els.answerGrid.querySelectorAll(".answer-button")[Number(event.key) - 1];
-    button?.click();
-    return;
-  }
-
-  if (!els.quizPanel.hidden && state.answeredCurrent && event.key === "Enter") {
-    event.preventDefault();
-    goNext();
-  }
-}
-
-els.startButton.addEventListener("click", () => startSession());
-els.restartButton.addEventListener("click", showSetup);
-els.nextButton.addEventListener("click", goNext);
-els.retryMistakesButton.addEventListener("click", retryMistakes);
-els.newSessionButton.addEventListener("click", showSetup);
-document.addEventListener("keydown", handleKeyboard);
+els.topicSelect.addEventListener("change", showAnotherCard);
+els.anotherCardButton.addEventListener("click", showAnotherCard);
+els.matchButton.addEventListener("click", matchSelectedCards);
 
 renderTopicOptions();
-updateScore();
+showAnotherCard();

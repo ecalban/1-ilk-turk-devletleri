@@ -1,6 +1,6 @@
-# İlk Türk Devletleri Testi
+# İlk Türk Devletleri · Eşini Bul
 
-RTF notlarındaki 150 bilgiyi dört seçenekli çalışma kartlarına dönüştüren, bağımlılıksız statik web uygulaması.
+RTF notlarındaki 150 bilgiyi tanım ve cevap kartlarıyla eşleştiren, bağımlılıksız ve mobil uyumlu web oyunu.
 
 ## Çalıştırma
 
