@@ -395,23 +395,24 @@ function matchCurrentCards() {
     return;
   }
 
+  state.matched = true;
   state.completedCardIds.add(state.currentCard.id);
   const deckStats = updateDeckInfo();
   els.definitionCard.classList.remove("is-wrong");
   els.answerCard.classList.remove("is-wrong");
   els.definitionCard.classList.add("is-matched");
   els.answerCard.classList.add("is-matched");
+  els.matchButton.disabled = true;
 
   if (deckStats.remainingCount === 0) {
     state.deckCompleted = true;
-    state.matched = true;
     els.anotherCardButton.textContent = "Desteyi baştan karıştır";
-    els.matchButton.disabled = true;
     showFeedback("Deste tamamlandı", `${state.currentCard.answer} bu tanımın eşidir. Bu destede yeni kart kalmadı.`);
     return;
   }
 
-  showNextDefinition();
+  showFeedback("Eşleşti", `${state.currentCard.answer} bu tanımın eşidir.`);
+  els.anotherCardButton.focus({ preventScroll: true });
 }
 
 function showFeedback(title, text, isWrong = false) {
