@@ -193,7 +193,7 @@ const QUESTIONS = RAW_NOTES.trim().split("\n").map((line, index) => {
 const state = {
   currentCard: null,
   answerCards: [],
-  answerIndex: 0,
+  selectedAnswer: null,
   matched: false,
   deckCompleted: false,
   completedCardIds: new Set(),
@@ -205,9 +205,7 @@ const els = {
   deckInfo: document.querySelector("#deckInfo"),
   definitionCard: document.querySelector("#definitionCard"),
   definitionText: document.querySelector("#definitionText"),
-  answerCard: document.querySelector("#answerCard"),
-  answerCounter: document.querySelector("#answerCounter"),
-  answerText: document.querySelector("#answerText"),
+  answerGrid: document.querySelector("#answerGrid"),
   feedbackPanel: document.querySelector("#feedbackPanel"),
   feedbackTitle: document.querySelector("#feedbackTitle"),
   feedbackText: document.querySelector("#feedbackText"),
@@ -262,7 +260,7 @@ function showNextDefinition() {
   if (pool.length === 0) {
     state.currentCard = null;
     state.answerCards = [];
-    state.answerIndex = 0;
+    state.selectedAnswer = null;
     state.deckCompleted = true;
     renderDeckComplete();
     return;
@@ -271,7 +269,7 @@ function showNextDefinition() {
   const freshPool = pool.filter((card) => card.id !== state.currentCard?.id);
   state.currentCard = shuffle(freshPool.length > 0 ? freshPool : pool)[0];
   state.answerCards = buildAnswerCards(state.currentCard);
-  state.answerIndex = 0;
+  state.selectedAnswer = null;
   state.matched = false;
   state.deckCompleted = false;
   renderGame();
@@ -321,12 +319,11 @@ function renderGame() {
   updateDeckInfo();
   els.definitionText.textContent = state.currentCard.prompt;
   els.definitionCard.classList.remove("is-matched", "is-complete", "is-wrong");
-  els.answerCard.classList.remove("is-matched", "is-wrong");
   els.feedbackPanel.hidden = true;
   els.feedbackPanel.classList.remove("is-wrong");
   els.anotherCardButton.textContent = "Başka kart göster";
-  els.matchButton.disabled = false;
-  renderAnswerCard();
+  els.matchButton.disabled = true;
+  renderAnswerCards();
 }
 
 function renderDeckComplete() {
@@ -335,84 +332,103 @@ function renderDeckComplete() {
   els.definitionText.textContent = "Bu destedeki tüm kartları eşleştirdin.";
   els.definitionCard.classList.remove("is-matched", "is-wrong");
   els.definitionCard.classList.add("is-complete");
-  els.answerCard.classList.remove("is-matched", "is-wrong");
-  els.answerCard.classList.add("is-empty");
-  els.answerCounter.textContent = "Deste bitti";
-  els.answerText.textContent = "Yeni kart kalmadı. Aynı desteyi baştan karıştırabilirsin.";
+  els.answerGrid.innerHTML = '<p class="empty-deck">Yeni kart kalmadı. Aynı desteyi baştan karıştırabilirsin.</p>';
   els.feedbackPanel.hidden = true;
   els.feedbackPanel.classList.remove("is-wrong");
   els.anotherCardButton.textContent = "Desteyi baştan karıştır";
   els.matchButton.disabled = true;
 }
 
-function renderAnswerCard() {
-  els.answerCounter.textContent = `Kart ${state.answerIndex + 1} / ${state.answerCards.length}`;
-  els.answerText.textContent = state.answerCards[state.answerIndex];
-  els.answerCard.classList.remove("is-matched", "is-wrong", "is-empty");
+function renderAnswerCards() {
+  els.answerGrid.innerHTML = "";
+  state.answerCards.forEach((answer) => {
+    const button = document.createElement("button");
+    button.className = "answer-card";
+    button.type = "button";
+    button.dataset.answer = answer;
+    button.textContent = answer;
+    button.setAttribute("aria-pressed", "false");
+    button.addEventListener("click", () => selectAnswerCard(button));
+    els.answerGrid.append(button);
+  });
+}
+
+function selectAnswerCard(selectedButton) {
+  if (state.matched || state.deckCompleted) {
+    return;
+  }
+
+  els.answerGrid.querySelectorAll(".answer-card").forEach((button) => {
+    button.classList.remove("is-selected", "is-wrong");
+    button.setAttribute("aria-pressed", "false");
+  });
+
+  state.selectedAnswer = selectedButton.dataset.answer;
+  selectedButton.classList.add("is-selected");
+  selectedButton.setAttribute("aria-pressed", "true");
+  els.definitionCard.classList.remove("is-wrong");
   els.feedbackPanel.hidden = true;
   els.feedbackPanel.classList.remove("is-wrong");
+  els.matchButton.disabled = false;
 }
 
-function getCurrentAnswer() {
-  return state.answerCards[state.answerIndex];
-}
-
-function isCurrentPairCorrect() {
-  return normalizeAnswer(getCurrentAnswer()) === normalizeAnswer(state.currentCard.answer);
+function isSelectedPairCorrect() {
+  return normalizeAnswer(state.selectedAnswer) === normalizeAnswer(state.currentCard.answer);
 }
 
 function markMistake(message) {
+  const selectedButton = els.answerGrid.querySelector(".answer-card.is-selected");
   els.definitionCard.classList.add("is-wrong");
-  els.answerCard.classList.add("is-wrong");
+  selectedButton?.classList.add("is-wrong");
+  selectedButton?.classList.remove("is-selected");
+  selectedButton?.setAttribute("aria-pressed", "false");
+  state.selectedAnswer = null;
+  els.matchButton.disabled = true;
   showFeedback("Bu çift olmadı", message, true);
 }
 
-function showAnotherAnswer() {
+function showAnotherCard() {
   if (state.deckCompleted) {
     resetSelectedDeck();
     return;
   }
 
-  if (state.matched) {
-    showNextDefinition();
-    return;
-  }
-
-  state.answerIndex += 1;
-  if (state.answerIndex >= state.answerCards.length) {
-    state.answerIndex = 0;
-  }
-  renderAnswerCard();
+  showNextDefinition();
 }
 
-function matchCurrentCards() {
-  if (state.deckCompleted || state.matched) {
+function matchSelectedCards() {
+  if (state.deckCompleted || state.matched || !state.selectedAnswer) {
     return;
   }
 
-  if (!isCurrentPairCorrect()) {
-    markMistake("Bu cevap başka bir tanıma ait. Başka kart gösterip yeniden dene.");
+  if (!isSelectedPairCorrect()) {
+    markMistake("Bu cevap başka bir tanıma ait. Başka bir cevap kartı seçip yeniden dene.");
     return;
   }
 
-  state.matched = true;
+  const matchedAnswer = state.currentCard.answer;
   state.completedCardIds.add(state.currentCard.id);
   const deckStats = updateDeckInfo();
-  els.definitionCard.classList.remove("is-wrong");
-  els.answerCard.classList.remove("is-wrong");
-  els.definitionCard.classList.add("is-matched");
-  els.answerCard.classList.add("is-matched");
   els.matchButton.disabled = true;
 
   if (deckStats.remainingCount === 0) {
+    state.matched = true;
     state.deckCompleted = true;
+    els.definitionCard.classList.remove("is-wrong");
+    els.definitionCard.classList.add("is-matched");
+    els.answerGrid.querySelectorAll(".answer-card").forEach((button) => {
+      button.disabled = true;
+      if (normalizeAnswer(button.dataset.answer) === normalizeAnswer(matchedAnswer)) {
+        button.classList.remove("is-selected");
+        button.classList.add("is-matched");
+      }
+    });
     els.anotherCardButton.textContent = "Desteyi baştan karıştır";
-    showFeedback("Deste tamamlandı", `${state.currentCard.answer} bu tanımın eşidir. Bu destede yeni kart kalmadı.`);
+    showFeedback("Deste tamamlandı", `${matchedAnswer} bu tanımın eşidir. Bu destede yeni kart kalmadı.`);
     return;
   }
 
-  showFeedback("Eşleşti", `${state.currentCard.answer} bu tanımın eşidir.`);
-  els.anotherCardButton.focus({ preventScroll: true });
+  showNextDefinition();
 }
 
 function showFeedback(title, text, isWrong = false) {
@@ -425,17 +441,17 @@ function showFeedback(title, text, isWrong = false) {
 function handleKeyboard(event) {
   if (event.key === "ArrowLeft") {
     event.preventDefault();
-    showAnotherAnswer();
+    showAnotherCard();
   }
   if (event.key === "ArrowRight") {
     event.preventDefault();
-    matchCurrentCards();
+    matchSelectedCards();
   }
 }
 
 els.topicSelect.addEventListener("change", chooseDeck);
-els.anotherCardButton.addEventListener("click", showAnotherAnswer);
-els.matchButton.addEventListener("click", matchCurrentCards);
+els.anotherCardButton.addEventListener("click", showAnotherCard);
+els.matchButton.addEventListener("click", matchSelectedCards);
 document.addEventListener("keydown", handleKeyboard);
 
 renderTopicOptions();

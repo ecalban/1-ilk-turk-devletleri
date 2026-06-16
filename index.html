@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="description" content="İlk Türk devletleri bilgilerini kartlarla eşleştiren mobil uyumlu tarih oyunu.">
     <title>İlk Türk Devletleri · Eşini Bul</title>
-    <link rel="stylesheet" href="styles.css?v=20260616-repeat">
+    <link rel="stylesheet" href="styles.css?v=20260616-grid">
   </head>
   <body>
     <main class="app-shell">
@@ -40,13 +40,16 @@
             <span></span>
           </div>
 
-          <article id="answerCard" class="answer-card-display" aria-live="polite">
-            <div class="answer-card-topline">
-              <p class="card-label">CEVAP KARTI</p>
-              <span id="answerCounter">Kart 1 / 10</span>
+          <section class="answers-section" aria-labelledby="answersTitle">
+            <div class="answers-heading">
+              <div>
+                <p class="card-label">CEVAP KARTLARI</p>
+                <h2 id="answersTitle">Eşleşen kartı seç</h2>
+              </div>
+              <span>10 karttan biri</span>
             </div>
-            <h2 id="answerText"></h2>
-          </article>
+            <div id="answerGrid" class="answer-grid"></div>
+          </section>
         </div>
 
         <div id="feedbackPanel" class="feedback-panel" aria-live="polite" hidden>
@@ -56,15 +59,15 @@
 
         <div class="game-actions">
           <button id="anotherCardButton" class="secondary-button" type="button">Başka kart göster</button>
-          <button id="matchButton" class="primary-button" type="button">Bu ikisini eşleştir</button>
+          <button id="matchButton" class="primary-button" type="button" disabled>Bu ikisini eşleştir</button>
         </div>
       </section>
 
       <footer>
-        Cevap kartlarını tek tek gez, eşleşen çifti gördüğünde bir araya getir.
+        10 cevap kartından birini seç, sonra eşleştirme düğmesini kullan.
       </footer>
     </main>
 
-    <script src="app.js?v=20260616-repeat"></script>
+    <script src="app.js?v=20260616-grid"></script>
   </body>
 </html>
